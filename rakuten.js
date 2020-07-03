@@ -85,7 +85,7 @@ const getOrderByMonth = (_year, _month) => {
 
 const ordersRakutenCollectionPath = "tential-db/orders/rakuten"
 
-const sendAllDocumentsToFirestore = () => {
+const sendRakuenOrdersToFirestore = () => {
   let firstMonth = {
     year: 19,
     month: 9
@@ -161,3 +161,50 @@ const sendAllDocumentsToFirestore = () => {
 //     notifyToSlack(`楽天: ${res.orderNumberList.length}件の注文情報を書き込みました`)
 //   }
 // }
+
+//ここからお願いします
+
+const sendRakuenUsersToFirestore = () => {
+  let firstMonth = {
+    year: 19,
+    month: 9
+  }
+
+  // 今までの月の配列作成
+  let today = new Date()
+  let thisYear = today.getFullYear() - 2000
+  let thisMonth = today.getMonth()
+
+  let months = [firstMonth]
+
+  let {
+    year,
+    month
+  } = firstMonth
+
+  while (year < thisYear || month <= thisMonth) {
+    if (month === 12) {
+      year += 1
+      month = 1
+      months.push({
+        year: year,
+        month: 1
+      })
+    } else {
+      month += 1
+      months.push({
+        year,
+        month
+      })
+    }
+  }
+
+  // 月ごとにデータ取得してfirestoreに反映
+  months.forEach(_month => {
+    let orders = getOrderByMonth(_month.year, _month.month)
+
+    orders.forEach(_order => firestore.createDocument(ordersRakutenCollectionPath, _order))
+    notifyToSlack(`楽天: ${orders.length}件の注文情報を書き込みました`)
+  })
+  notifyToSlack("楽天の注文情報の書き込みが終了しました")
+}
