@@ -165,7 +165,7 @@ const delete_specific_triggers = (name_function) => {
   }
 }
 
-const getAmazonAllOrders = () => {
+const createDocumentsAmazonAllOrders = () => {
   const firstOrderDate = {
     year: 2019,
     month: 10,
@@ -188,3 +188,25 @@ const getAmazonAllOrders = () => {
 }
 
 //ここからお願いします
+
+const createDocumentsAmazonOrders = () => {
+  const firstOrderDate = {
+    year: 2019,
+    month: 10,
+    day: 6
+  }
+
+  let res = mwsListOrders(
+    firstOrderDate.year,
+    firstOrderDate.month,
+    firstOrderDate.day
+  )
+
+  let orders = res.listordersresponse.listordersresult.orders.order
+  let nextToken = res.listordersresponse.listordersresult.nexttoken
+  
+  console.log(orders)
+
+  orders.forEach(_document => firestore.createDocument("amazon_test", _document))
+  notifyToSlack(`Amazon: ${orders.length}件の注文情報を書き込みました`)
+}
