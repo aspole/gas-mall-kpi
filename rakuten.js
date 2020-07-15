@@ -17,7 +17,7 @@ const postRequestRakutenOrderApi = (_action, _data) => {
   let path = `https://api.rms.rakuten.co.jp/es/2.0/order/${_action}/`
 
   let res = UrlFetchApp.fetch(path, options)
-  
+
   return JSON.parse(res)
 }
 
@@ -33,7 +33,7 @@ const getOrder = (_orderNumberList) => {
     let data = {
       "orderNumberList": arrayList[i]
     }
-  
+
     let { OrderModelList } = postRequestRakutenOrderApi("getOrder", data)
     orders = [...orders, ...OrderModelList]
   }
@@ -83,7 +83,7 @@ const getOrderByMonth = (_year, _month) => {
   return orders
 }
 
-const ordersRakutenCollectionPath = "tential-db/orders/rakuten"
+const ordersRakutenCollectionPath = "rakuten_orders"
 
 const createDocumentsRakutenAllOrders = () => {
   let firstMonth = {
@@ -120,47 +120,51 @@ const createDocumentsRakutenAllOrders = () => {
     }
   }
 
+  let ordersCount = 0
   // 月ごとにデータ取得してfirestoreに反映
   months.forEach(_month => {
     let orders = getOrderByMonth(_month.year, _month.month)
 
     orders.forEach(_order => firestore.createDocument(ordersRakutenCollectionPath, _order))
-    notifyToSlack(`楽天: ${orders.length}件の注文情報を書き込みました`)
+    ordersCount += orders.length
+    notifyToSlack(`楽天: ${ordersCount}件の注文情報を書き込みました`)
   })
   notifyToSlack("楽天の注文情報の書き込みが終了しました")
 }
 
-// const updateRakutenOrders = () => {
-//   let documents = firestore.query("rakuten").OrderBy("orderDatetime", "desc").Limit(1).Execute()
-//   let docData = documentData(documents[0])
-//   let JstDateTime = docData.orderDatetime.stringValue
-  
-//   let startYear = JstDateTime.slice(0, 4)
-//   let startMonth = JstDateTime.slice(5, 7)
-//   let startDate = JstDateTime.slice(8, 10)
-//   let startHour = JstDateTime.slice(11, 13)
-//   let startMinutes = JstDateTime.slice(14, 16)
-//   let startSeconds = JstDateTime.slice(17, 19)
-  
-//   let now = new Date()
-//   let endYear = now.getFullYear()
-//   let endMonth = now.getMonth() + 1
-//   let endDate = now.getDate()
-  
-//   let options = {
-//     "dateType": 1,
-//     "startDatetime": `${startYear}-${startMonth}-${startDate}T${startHour}:${startMinutes}:${startSeconds}+0900`,
-//     "endDatetime": `${endYear}-${endMonth}-${endDate}T00:00:00+0900`
-//   }
-            
-//   let res = postRequestRakutenOrderApi("searchOrder", options)
+const addRakutenOrders = () => {
+  notifyToSlack("楽天の注文情報の書き込みを開始します")
+  let documents = firestore.query("rakuten_orders").OrderBy("orderDatetime", "desc").Limit(1).Execute()
+  let docData = documentData(documents[0])
+  let JstDateTime = docData.orderDatetime.stringValue
 
-//   if(res.orderNumberList && res.orderNumberList.length > 1) {
-//     res.orderNumberList.shift()
-//     res.orderNumberList.forEach(_document => firestore.createDocument(ordersRakutenCollectionPath, _document))
-//     notifyToSlack(`楽天: ${res.orderNumberList.length}件の注文情報を書き込みました`)
-//   }
-// }
+  let startYear = JstDateTime.slice(0, 4)
+  let startMonth = JstDateTime.slice(5, 7)
+  let startDate = JstDateTime.slice(8, 10)
+  let startHour = JstDateTime.slice(11, 13)
+  let startMinutes = JstDateTime.slice(14, 16)
+  let startSeconds = JstDateTime.slice(17, 19)
+
+  let now = new Date()
+  let endYear = now.getFullYear()
+  let endMonth = now.getMonth() + 1
+  let endDate = now.getDate()
+
+  let options = {
+    "dateType": 1,
+    "startDatetime": `${startYear}-${startMonth}-${startDate}T${startHour}:${startMinutes}:${startSeconds}+0900`,
+    "endDatetime": `${endYear}-${endMonth}-${endDate}T00:00:00+0900`
+  }
+
+  let res = postRequestRakutenOrderApi("searchOrder", options)
+
+  if (res.orderNumberList && res.orderNumberList.length > 1) {
+    res.orderNumberList.shift()
+    res.orderNumberList.forEach(_document => firestore.createDocument(ordersRakutenCollectionPath, _document))
+    notifyToSlack(`楽天: ${res.orderNumberList.length}件の注文情報を書き込みました`)
+  }
+  notifyToSlack("楽天の注文情報の書き込みが終了しました")
+}
 
 //ここからお願いします
 
@@ -202,7 +206,7 @@ const createDocumentsRakutenOrders = () => {
   // 月ごとにデータ取得してfirestoreに反映
   months.forEach(_month => {
     let orders = getOrderByMonth(_month.year, _month.month)
-        
+
     console.log(orders)
 
     orders.forEach(_order => firestore.createDocument("rakuten_test", _order))
