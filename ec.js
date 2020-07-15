@@ -4,7 +4,7 @@ const postEcApi = (_payload, _action) => {
   };
   if (_payload) options["payload"] = _payload
 
-  let url = "https://db406db4d74e.ngrok.io/api/v1/gas/"
+  let url = "https://tential.jp/api/v1/gas/"
 
   let res = UrlFetchApp.fetch(`${url}${_action}`, options);
   res = JSON.parse(res)
@@ -27,25 +27,31 @@ const importEcProducts = (_payload) => {
   return res
 }
 
-const createDocumentsEcAllOrders = () => {
+const createEcOrdersDocuments = (_function_name) => {
+  notifyToSlack("ECの注文情報の書き込みを開始します")
   let start_time = new Date()
   let properties = PropertiesService.getScriptProperties()
 
   let searchParams = {}
-  let created_date = properties.getProperty("createDocumentsEcAllOrders/created_date")
-  if (created_date) searchParams["created_date"] = created_date
+  let createdDateProp = properties.getProperty(`${_function_name}/createdDate`)
+  if (_function_name === "addEcOrders" && !createdDateProp) {
+    let documents = firestore.query("ec_orders").OrderBy("created_date", "desc").Limit(1).Execute()
+    let docData = documentData(documents[0])
+    searchParams["created_date"] = docData.created_date.integerValue
+  } else if (createdDateProp) searchParams["created_date"] = createdDateProp
 
   let ordersCount = 0
-  if (properties.getProperty("createDocumentsEcAllOrders/ordersCount")) ordersCount = parseInt(properties.getProperty("createDocumentsEcAllOrders/ordersCount"))
+  let ordersCountProp = properties.getProperty(`${_function_name}/ordersCount`)
+  if (ordersCountProp) ordersCount = parseInt(ordersCountProp)
 
   let next = true
   while (next) {
     let current_time = new Date()
     let difference = parseInt((current_time.getTime() - start_time.getTime()) / (1000 * 60));
     if (difference >= 5) {
-      properties.setProperty("createDocumentsEcAllOrders/created_date", searchParams["created_date"]);
-      properties.setProperty("createDocumentsEcAllOrders/ordersCount", ordersCount);
-      ScriptApp.newTrigger("createDocumentsEcAllOrders").timeBased().after(60 * 1000).create()
+      properties.setProperty(`${_function_name}/ordersCount`, ordersCount);
+      ScriptApp.newTrigger(_function_name).timeBased().after(60 * 1000).create()
+      notifyToSlack("一時処理終了")
       return
     }
 
@@ -54,23 +60,37 @@ const createDocumentsEcAllOrders = () => {
     if (res.status === 200) {
       let orders = res.data.list
       orders.forEach(_document => firestore.createDocument("ec_orders", _document))
-      ordersCount += orders.length
-      notifyToSlack(`EC: ${ordersCount}件の注文情報を書き込みました`)
-
-      next = res.data.next
-      if (!next) break
 
       let lastOrder = orders[orders.length - 1]
       searchParams["created_date"] = lastOrder.created_date
+      properties.setProperty(`${_function_name}/createdDate`, lastOrder.created_date)
+
+      ordersCount += orders.length
+      let dateTime = new Date(lastOrder.created_date * 1000);
+      notifyToSlack(`EC: ${dateTime.toLocaleDateString()}までの${ordersCount}件の注文情報を書き込みました`)
+
+      next = res.data.next
+      if (!next) break
     } else {
       break
     }
   }
+  console.log(ordersCount)
   notifyToSlack("ECの注文情報の書き込みが終了しました")
 
-  properties.setProperty("createDocumentsEcAllOrders/created_date", "")
-  properties.setProperty("createDocumentsEcAllOrders/ordersCount", 0)
-  delete_specific_triggers("createDocumentsEcAllOrders")
+  properties.setProperty(`${_function_name}/ordersCount`, "")
+  properties.setProperty(`${_function_name}/createdDate`, "")
+  delete_specific_triggers(_function_name)
+  return
+}
+
+const createEcOrders = () => {
+  createEcOrdersDocuments("createEcOrders")
+  return
+}
+
+const addEcOrders = () => {
+  createEcOrdersDocuments("addEcOrders")
   return
 }
 
