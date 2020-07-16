@@ -1,6 +1,7 @@
 const daily = () => {
   try {
-    updateRakutenOrders()
+    addRakutenOrders()
+    addEcOrders()
   } catch(e) {
     notifyToSlack(`updateRakutenOrders: ${e.message}`)
   }

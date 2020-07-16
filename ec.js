@@ -75,7 +75,6 @@ const createEcOrdersDocuments = (_function_name) => {
       break
     }
   }
-  console.log(ordersCount)
   notifyToSlack("ECの注文情報の書き込みが終了しました")
 
   properties.setProperty(`${_function_name}/ordersCount`, "")
@@ -147,7 +146,7 @@ const createDocumentsEcAllProducts = () => {
 
   if (res.status === 200) {
     let products = res.data
-    products.forEach(_document => firestore.createDocument("ec_products_test", _document))
+    products.forEach(_document => firestore.createDocument("ec_products", _document))
   }
 }
 

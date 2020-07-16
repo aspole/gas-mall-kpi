@@ -112,11 +112,19 @@ const mwsListOrdersByNextToken = (_nextToken) => {
   return json
 }
 
-const ordersAmazonCollectionPath = "tential-db/orders/amazon"
+const ordersAmazonCollectionPath = "amazon_orders"
 
-const repeatMwsListOrdersByNextToken = (_nextToken) => {
+const repeatMwsListOrdersByNextToken = (_nextToken, _ordersCount) => {
   let properties = PropertiesService.getScriptProperties();
   let nextToken = ""
+  let ordersCount = 0
+  
+  if (_ordersCount && _ordersCount > 0) {
+    ordersCount = _ordersCount
+  } else if (properties.getProperty("ordersCount")) {
+    ordersCount = properties.getProperty("ordersCount")
+  }
+
   if (typeof _nextToken === "string") {
     nextToken = _nextToken
   } else if (properties.getProperty("nextToken")) {
@@ -132,12 +140,14 @@ const repeatMwsListOrdersByNextToken = (_nextToken) => {
       nextToken = res.listordersbynexttokenresponse.listordersbynexttokenresult.nexttoken
       let orders = res.listordersbynexttokenresponse.listordersbynexttokenresult.orders.order
       orders.forEach(_document => firestore.createDocument(ordersAmazonCollectionPath, _document))
-      notifyToSlack(`Amazon: ${orders.length}件の注文情報を書き込みました`)
+      ordersCount += orders.length
+      notifyToSlack(`Amazon: ${ordersCount}件の注文情報を書き込みました`)
       if(!nextToken) break
 
     } else if (res.errorresponse.error.code === "RequestThrottled"){
 
       properties.setProperty("nextToken", nextToken)
+      properties.setProperty("ordersCount", ordersCount)
       ScriptApp.newTrigger("repeatMwsListOrdersByNextToken").timeBased().after(60 * 1000).create()
       return
 
@@ -151,18 +161,10 @@ const repeatMwsListOrdersByNextToken = (_nextToken) => {
     }
   }
   notifyToSlack("Amazonの注文情報の書き込みが終了しました")
-  properties.setProperty("nextToken", "");
+  properties.setProperty("nextToken", "")
+  properties.setProperty("ordersCount", "")
   delete_specific_triggers("repeatMwsListOrdersByNextToken");
   return;
-}
-
-const delete_specific_triggers = (name_function) => {
-  var all_triggers = ScriptApp.getProjectTriggers();
-
-  for (var i = 0; i < all_triggers.length; ++i) {
-    if (all_triggers[i].getHandlerFunction() == name_function)
-      ScriptApp.deleteTrigger(all_triggers[i]);
-  }
 }
 
 const createDocumentsAmazonAllOrders = () => {
@@ -181,15 +183,17 @@ const createDocumentsAmazonAllOrders = () => {
   let orders = res.listordersresponse.listordersresult.orders.order
   let nextToken = res.listordersresponse.listordersresult.nexttoken
 
+  let ordersCount = 0
   orders.forEach(_document => firestore.createDocument(ordersAmazonCollectionPath, _document))
-  notifyToSlack(`Amazon: ${orders.length}件の注文情報を書き込みました`)
+  ordersCount += orders.length
+  notifyToSlack(`Amazon: ${ordersCount}件の注文情報を書き込みました`)
 
-  repeatMwsListOrdersByNextToken(nextToken)
+  repeatMwsListOrdersByNextToken(nextToken, ordersCount)
 }
 
 //ここからお願いします
 
-const createDocumentsAmazonOrders = () => {
+const createDocumentsAmazonUsers = () => {
   const firstOrderDate = {
     year: 2019,
     month: 10,
@@ -205,8 +209,14 @@ const createDocumentsAmazonOrders = () => {
   let orders = res.listordersresponse.listordersresult.orders.order
   let nextToken = res.listordersresponse.listordersresult.nexttoken
   
-  console.log(orders)
-
-  orders.forEach(_document => firestore.createDocument("amazon_test", _document))
-  notifyToSlack(`Amazon: ${orders.length}件の注文情報を書き込みました`)
+  orders.forEach( _document => {
+    let partOfOrders = [
+      'buyeremail', 'isprime', 'lastupdatedate', 'latestshipdate', 'ordertotal', 'ordertype',
+      'paymentmethoddetails', 'paymentmethod', 'purchasedate', 'saleschannel', 'shippingaddress'
+    ]
+    let partOfOrdersDocument = new Object()
+    partOfOrders.forEach( key => partOfOrdersDocument[key]=_document[key] )
+    firestore.createDocument("amazon_users", partOfOrdersDocument)
+  })
+  notifyToSlack(`[test]Amazon: ${orders.length}件の顧客情報を書き込みました`)
 }

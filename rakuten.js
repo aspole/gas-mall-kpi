@@ -85,7 +85,7 @@ const getOrderByMonth = (_year, _month) => {
 
 const ordersRakutenCollectionPath = "rakuten_orders"
 
-const createDocumentsRakutenAllOrders = () => {
+const createRakutenOrders = () => {
   let firstMonth = {
     year: 19,
     month: 9
@@ -158,17 +158,17 @@ const addRakutenOrders = () => {
 
   let res = postRequestRakutenOrderApi("searchOrder", options)
 
-  if (res.orderNumberList && res.orderNumberList.length > 1) {
+  if(res.orderNumberList && res.orderNumberList.length > 1) {
     res.orderNumberList.shift()
     res.orderNumberList.forEach(_document => firestore.createDocument(ordersRakutenCollectionPath, _document))
     notifyToSlack(`楽天: ${res.orderNumberList.length}件の注文情報を書き込みました`)
   }
-  notifyToSlack("楽天の注文情報の書き込みが終了しました")
+　notifyToSlack("楽天の注文情報の書き込みが終了しました")
 }
 
 //ここからお願いします
 
-const createDocumentsRakutenOrders = () => {
+const createRakutenUsers = () => {
   let firstMonth = {
     year: 19,
     month: 9
@@ -206,10 +206,7 @@ const createDocumentsRakutenOrders = () => {
   // 月ごとにデータ取得してfirestoreに反映
   months.forEach(_month => {
     let orders = getOrderByMonth(_month.year, _month.month)
-
-    console.log(orders)
-
-    orders.forEach(_order => firestore.createDocument("rakuten_test", _order))
+    orders.forEach(_order => firestore.createDocument("rakuten_users", _order['OrdererModel']))
     notifyToSlack(`楽天: ${orders.length}件の注文情報を書き込みました`)
   })
   notifyToSlack("楽天の注文情報の書き込みが終了しました")

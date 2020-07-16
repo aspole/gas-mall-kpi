@@ -20,9 +20,15 @@ const firestore = FirestoreApp.getFirestore(
 )
 
 const documentData = (_document) => {
-  let str = /.*documents./
-  let _id = _document.name.replace(str, "")
+  let _id = documentId(_document)
   let documentWithMetadata = firestore.getDocument(_id)
 
   return documentWithMetadata.fields
+}
+
+const documentId = (_document) => {
+  let str = /.*documents./
+  let _id = _document.name.replace(str, "")
+
+  return _id
 }
