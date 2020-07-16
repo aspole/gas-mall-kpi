@@ -1,5 +1,6 @@
 const notifyToSlack = (_text) => {
-  let postUrl = "https://hooks.slack.com/services/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"
+  return
+  let postUrl = "https://hooks.slack.com/services/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"
 
   let json = {
     "text": _text
