@@ -1,8 +1,10 @@
 const daily = () => {
-  try {
-    addRakutenOrders()
-    addEcOrders()
-  } catch(e) {
-    notifyToSlack(`updateRakutenOrders: ${e.message}`)
-  }
+  Promise.all([
+    addRakutenOrdersAndUsers(),
+    addEcOrders(),
+    addEcUsers(),
+    updateEcProducts()
+  ]).catch(e => {
+    notifyToSlack(`Error: ${e.message}`)
+  })
 }

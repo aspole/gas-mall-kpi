@@ -212,46 +212,49 @@ const createRakutenUsers = () => {
   notifyToSlack("楽天のユーザー情報の書き込みが終了しました")
 }
 
-const addRakutenOrdersAndUsers = () => {
-  notifyToSlack("楽天の情報の書き込みを開始します")
-  // firestoreからorderDatetimeの降順に1つドキュメント取得
-  let documents = firestore.query("rakuten_orders").OrderBy("orderDatetime", "desc").Limit(1).Execute()
-  let docData = documentData(documents[0])
-  let JstDateTime = docData.orderDatetime.stringValue
-
-  // 文字列から必要な時間情報だけ抽出
-  let startYear = JstDateTime.slice(0, 4)
-  let startMonth = JstDateTime.slice(5, 7)
-  let startDate = JstDateTime.slice(8, 10)
-  let startHour = JstDateTime.slice(11, 13)
-  let startMinutes = JstDateTime.slice(14, 16)
-  let startSeconds = JstDateTime.slice(17, 19)
-
-  // 毎日0~1時のトリガーで発火する想定なので、当日0時までの期間を指定
-  let now = new Date()
-  let endYear = now.getFullYear()
-  let endMonth = now.getMonth() + 1
-  let endDate = now.getDate()
-
-  let options = {
-    "dateType": 1,
-    "startDatetime": `${startYear}-${startMonth}-${startDate}T${startHour}:${startMinutes}:${startSeconds}+0900`,
-    "endDatetime": `${endYear}-${endMonth}-${endDate}T00:00:00+0900`
-  }
-
-  // firestoreの最新のドキュメントから当日0時までの注文情報取得
-  let res = postRequestRakutenOrderApi("searchOrder", options)
-
-  // startDatetimeの重複分の情報は必ず1つ返ってくるので配列が2つ以上の長さの時に処理
-  if (res.orderNumberList && res.orderNumberList.length > 1) {
-    // 配列の最初の要素を削除
-    res.orderNumberList.shift()
-    let orders = getOrder(res.orderNumberList)
-    orders.forEach(_order => {
-      firestore.createDocument(rakutenOrdersCollectionPath, _order)
-      firestore.createDocument(rakutenUsersCollectionPath, _order['OrdererModel'])
-    })
+const addRakutenOrdersAndUsers = async () => {
+  try {
+    // firestoreからorderDatetimeの降順に1つドキュメント取得
+    let documents = firestore.query("rakuten_orders").OrderBy("orderDatetime", "desc").Limit(1).Execute()
+    let docData = documentData(documents[0])
+    let JstDateTime = docData.orderDatetime.stringValue
+  
+    // 文字列から必要な時間情報だけ抽出
+    let startYear = JstDateTime.slice(0, 4)
+    let startMonth = JstDateTime.slice(5, 7)
+    let startDate = JstDateTime.slice(8, 10)
+    let startHour = JstDateTime.slice(11, 13)
+    let startMinutes = JstDateTime.slice(14, 16)
+    let startSeconds = JstDateTime.slice(17, 19)
+  
+    // 毎日0~1時のトリガーで発火する想定なので、当日0時までの期間を指定
+    let now = new Date()
+    let endYear = now.getFullYear()
+    let endMonth = now.getMonth() + 1
+    let endDate = now.getDate()
+  
+    let options = {
+      "dateType": 1,
+      "startDatetime": `${startYear}-${startMonth}-${startDate}T${startHour}:${startMinutes}:${startSeconds}+0900`,
+      "endDatetime": `${endYear}-${endMonth}-${endDate}T00:00:00+0900`
+    }
+  
+    // firestoreの最新のドキュメントから当日0時までの注文情報取得
+    let res = postRequestRakutenOrderApi("searchOrder", options)
+  
+    // startDatetimeの重複分の情報は必ず1つ返ってくるので配列が2つ以上の長さの時に処理
+    if (res.orderNumberList && res.orderNumberList.length > 1) {
+      // 配列の最初の要素を削除
+      res.orderNumberList.shift()
+      let orders = getOrder(res.orderNumberList)
+      orders.forEach(_order => {
+        firestore.createDocument(rakutenOrdersCollectionPath, _order)
+        firestore.createDocument(rakutenUsersCollectionPath, _order['OrdererModel'])
+      })
+    }
     notifyToSlack(`楽天: ${res.orderNumberList.length}件の注文情報と顧客情報を書き込みました`)
+  } catch (e) {
+    notifyToSlack(`addRakutenOrdersAndUsers: ${e.message}`)
+    return
   }
-  notifyToSlack("楽天の情報の書き込みが終了しました")
 }
