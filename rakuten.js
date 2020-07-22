@@ -1,5 +1,5 @@
-const rakutenOrdersCollectionPath = "rakuten_orders_test"
-const rakutenUsersCollectionPath = "rakuten_users_test"
+const rakutenOrdersCollectionPath = "rakuten_orders"
+const rakutenUsersCollectionPath = "rakuten_users"
 
 const postRequestRakutenOrderApi = (_action, _data) => {
   let serviceSecret = "SP375474_fcLsqwX2OcVfcsyK"
@@ -133,40 +133,6 @@ const createRakutenOrders = () => {
   notifyToSlack("楽天の注文情報の書き込みが終了しました")
 }
 
-// const addRakutenOrders = () => {
-//   notifyToSlack("楽天の注文情報の書き込みを開始します")
-//   let documents = firestore.query("rakuten_orders").OrderBy("orderDatetime", "desc").Limit(1).Execute()
-//   let docData = documentData(documents[0])
-//   let JstDateTime = docData.orderDatetime.stringValue
-
-//   let startYear = JstDateTime.slice(0, 4)
-//   let startMonth = JstDateTime.slice(5, 7)
-//   let startDate = JstDateTime.slice(8, 10)
-//   let startHour = JstDateTime.slice(11, 13)
-//   let startMinutes = JstDateTime.slice(14, 16)
-//   let startSeconds = JstDateTime.slice(17, 19)
-
-//   let now = new Date()
-//   let endYear = now.getFullYear()
-//   let endMonth = now.getMonth() + 1
-//   let endDate = now.getDate()
-
-//   let options = {
-//     "dateType": 1,
-//     "startDatetime": `${startYear}-${startMonth}-${startDate}T${startHour}:${startMinutes}:${startSeconds}+0900`,
-//     "endDatetime": `${endYear}-${endMonth}-${endDate}T00:00:00+0900`
-//   }
-
-//   let res = postRequestRakutenOrderApi("searchOrder", options)
-
-//   if(res.orderNumberList && res.orderNumberList.length > 1) {
-//     res.orderNumberList.shift()
-//     res.orderNumberList.forEach(_document => firestore.createDocument(rakutenOrdersCollectionPath, _document))
-//     notifyToSlack(`楽天: ${res.orderNumberList.length}件の注文情報を書き込みました`)
-//   }
-//   notifyToSlack("楽天の注文情報の書き込みが終了しました")
-// }
-
 const createRakutenUsers = () => {
   notifyToSlack("楽天のユーザー情報の書き込みを開始します")
   let firstMonth = {
@@ -212,13 +178,89 @@ const createRakutenUsers = () => {
   notifyToSlack("楽天のユーザー情報の書き込みが終了しました")
 }
 
-const addRakutenOrdersAndUsers = async () => {
+const createRakutenOrdersAndUsers = () => {
+  notifyToSlack("楽天の情報の書き込みを開始します")
+  let start_time = new Date()
+
+  let firstMonth = {
+    year: 19,
+    month: 9
+  }
+
+  // 今までの月の配列作成
+  let today = new Date()
+  let thisYear = today.getFullYear() - 2000
+  let thisMonth = today.getMonth()
+
+  let monthes = [firstMonth]
+
+  let {
+    year,
+    month
+  } = firstMonth
+
+  while (year < thisYear || month <= thisMonth) {
+    if (month === 12) {
+      year += 1
+      month = 1
+      monthes.push({
+        year: year,
+        month: 1
+      })
+    } else {
+      month += 1
+      monthes.push({
+        year,
+        month
+      })
+    }
+  }
+
+  let properties = PropertiesService.getScriptProperties()
+
+  let ordersCount = 0
+  let ordersCountProp = properties.getProperty("createRakutenOrdersAndUsers/ordersCount")
+  if (ordersCountProp) ordersCount = parseInt(ordersCountProp)
+
+  let monthesIndex = 0
+  let monthesIndexProp = properties.getProperty("createRakutenOrdersAndUsers/monthesIndex")
+  if (monthesIndexProp) monthesIndex = parseInt(monthesIndexProp)
+
+  for (monthesIndex; monthesIndex < monthes.length; monthesIndex++) {
+    let current_time = new Date()
+    let difference = parseInt((current_time.getTime() - start_time.getTime()) / (1000 * 60));
+    if (difference >= 5) {
+      properties.setProperty("createRakutenOrdersAndUsers/ordersCount", ordersCount);
+      properties.setProperty("createRakutenOrdersAndUsers/monthesIndex", monthesIndex);
+      ScriptApp.newTrigger("createRakutenOrdersAndUsers").timeBased().after(60 * 1000).create()
+      return
+    }
+
+    // 月ごとにデータ取得してfirestoreに反映
+    let _month = monthes[monthesIndex]
+    let orders = getOrderByMonth(_month.year, _month.month)
+
+    orders.forEach(_order => {
+      firestore.createDocument(rakutenOrdersCollectionPath, _order)
+      firestore.createDocument(rakutenUsersCollectionPath, _order['OrdererModel'])
+    })
+    ordersCount += orders.length
+    notifyToSlack(`楽天: ${ordersCount}件の注文情報と顧客情報を書き込みました`)
+  }
+  notifyToSlack("楽天の情報の書き込みが終了しました")
+
+  properties.setProperty("createRakutenOrdersAndUsers/ordersCount", "")
+  properties.setProperty("createRakutenOrdersAndUsers/monthesIndex", "")
+  delete_specific_triggers("createRakutenOrdersAndUsers")
+}
+
+const addRakutenOrdersAndUsers = () => {
   try {
     // firestoreからorderDatetimeの降順に1つドキュメント取得
     let documents = firestore.query("rakuten_orders").OrderBy("orderDatetime", "desc").Limit(1).Execute()
     let docData = documentData(documents[0])
     let JstDateTime = docData.orderDatetime.stringValue
-  
+
     // 文字列から必要な時間情報だけ抽出
     let startYear = JstDateTime.slice(0, 4)
     let startMonth = JstDateTime.slice(5, 7)
@@ -226,33 +268,36 @@ const addRakutenOrdersAndUsers = async () => {
     let startHour = JstDateTime.slice(11, 13)
     let startMinutes = JstDateTime.slice(14, 16)
     let startSeconds = JstDateTime.slice(17, 19)
-  
+
     // 毎日0~1時のトリガーで発火する想定なので、当日0時までの期間を指定
     let now = new Date()
     let endYear = now.getFullYear()
     let endMonth = now.getMonth() + 1
     let endDate = now.getDate()
-  
+
     let options = {
       "dateType": 1,
       "startDatetime": `${startYear}-${startMonth}-${startDate}T${startHour}:${startMinutes}:${startSeconds}+0900`,
       "endDatetime": `${endYear}-${endMonth}-${endDate}T00:00:00+0900`
     }
-  
+
     // firestoreの最新のドキュメントから当日0時までの注文情報取得
     let res = postRequestRakutenOrderApi("searchOrder", options)
-  
+
     // startDatetimeの重複分の情報は必ず1つ返ってくるので配列が2つ以上の長さの時に処理
     if (res.orderNumberList && res.orderNumberList.length > 1) {
       // 配列の最初の要素を削除
-      res.orderNumberList.shift()
       let orders = getOrder(res.orderNumberList)
+      orders = orders.filter(_order => _order.orderNumber !== docData.orderNumber.stringValue)
       orders.forEach(_order => {
         firestore.createDocument(rakutenOrdersCollectionPath, _order)
         firestore.createDocument(rakutenUsersCollectionPath, _order['OrdererModel'])
       })
+      notifyToSlack(`楽天: ${orders.length}件の注文情報と顧客情報を書き込みました`)
+    } else {
+      notifyToSlack("楽天: 新規注文はありませんでした")
     }
-    notifyToSlack(`楽天: ${res.orderNumberList.length}件の注文情報と顧客情報を書き込みました`)
+    return
   } catch (e) {
     notifyToSlack(`addRakutenOrdersAndUsers: ${e.message}`)
     return

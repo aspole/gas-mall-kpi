@@ -1,5 +1,6 @@
 const ecOrdersCollectionPath = "ec_orders"
 const ecUsersCollectionPath = "ec_users"
+const ecProductsCollectionPath = "ec_products"
 
 const postEcApi = (_payload, _action) => {
   let options = {
@@ -32,11 +33,12 @@ const importEcProducts = (_payload) => {
 
 const createEcOrdersDocuments = async (_function_name) => {
   try {
+    notifyToSlack("EC: 注文情報を更新します")
     let start_time = new Date()
     let properties = PropertiesService.getScriptProperties()
 
     let searchParams = {}
-    let createdDateProp = properties.getProperty(`${_function_name}/createdDate`)
+    let createdDateProp = properties.getProperty("createEcOrdersDocuments/createdDate")
     if (_function_name === "addEcOrders" && !createdDateProp) {
       let documents = firestore.query("ec_orders").OrderBy("created_date", "desc").Limit(1).Execute()
       let docData = documentData(documents[0])
@@ -44,7 +46,7 @@ const createEcOrdersDocuments = async (_function_name) => {
     } else if (createdDateProp) searchParams["created_date"] = createdDateProp
 
     let ordersCount = 0
-    let ordersCountProp = properties.getProperty(`${_function_name}/ordersCount`)
+    let ordersCountProp = properties.getProperty("createEcOrdersDocuments/ordersCount")
     if (ordersCountProp) ordersCount = parseInt(ordersCountProp)
 
     let next = true
@@ -52,8 +54,8 @@ const createEcOrdersDocuments = async (_function_name) => {
       let current_time = new Date()
       let difference = parseInt((current_time.getTime() - start_time.getTime()) / (1000 * 60));
       if (difference >= 5) {
-        properties.setProperty(`${_function_name}/ordersCount`, ordersCount);
-        ScriptApp.newTrigger(_function_name).timeBased().after(60 * 1000).create()
+        properties.setProperty("createEcOrdersDocuments/ordersCount", ordersCount);
+        ScriptApp.newTrigger("createEcOrdersDocuments").timeBased().after(60 * 1000).create()
         return
       }
 
@@ -65,37 +67,42 @@ const createEcOrdersDocuments = async (_function_name) => {
 
         let lastOrder = orders[orders.length - 1]
         searchParams["created_date"] = lastOrder.created_date
-        properties.setProperty(`${_function_name}/createdDate`, lastOrder.created_date)
+        properties.setProperty("createEcOrdersDocuments/createdDate", lastOrder.created_date)
 
         ordersCount += orders.length
-        let dateTime = new Date(lastOrder.created_date * 1000);
+        console.log(ordersCount)
 
         next = res.data.next
         if (!next) break
       } else {
-        notifyToSlack(`${_function_name}: response failed`)
+        notifyToSlack("createEcOrdersDocuments: response failed")
         break
       }
     }
-    notifyToSlack(`EC: ${ordersCount}件の注文情報を書き込みました`)
+    if (ordersCount >= 1) {
+      notifyToSlack(`EC: ${ordersCount}件の注文情報を書き込みました`)
+    } else[
+      notifyToSlack("EC: 新規の注文情報はありません")
+    ]
 
-    properties.setProperty(`${_function_name}/ordersCount`, "")
-    properties.setProperty(`${_function_name}/createdDate`, "")
-    delete_specific_triggers(_function_name)
+    properties.setProperty("createEcOrdersDocuments/ordersCount", "")
+    properties.setProperty("createEcOrdersDocuments/createdDate", "")
+    delete_specific_triggers("createEcOrdersDocuments")
     return
   } catch (e) {
-    notifyToSlack(`${_function_name}: ${e.message}`)
+    notifyToSlack(`createEcOrdersDocuments: ${e.message}`)
     return
   }
 }
 
-const createEcUsersDocuments = async (_function_name) => {
+const createEcUsersDocuments = (_function_name) => {
   try {
+    notifyToSlack("EC: 顧客情報を更新します")
     let start_time = new Date()
     let properties = PropertiesService.getScriptProperties()
 
     let searchParams = {}
-    let createdDateProp = properties.getProperty(`${_function_name}/createdDate`)
+    let createdDateProp = properties.getProperty("createEcUsersDocuments/createdDate")
     if (_function_name === "addEcUsers" && !createdDateProp) {
       let documents = firestore.query("ec_users").OrderBy("created_date", "desc").Limit(1).Execute()
       let docData = documentData(documents[0])
@@ -103,7 +110,7 @@ const createEcUsersDocuments = async (_function_name) => {
     } else if (createdDateProp) searchParams["created_date"] = createdDateProp
 
     let usersCount = 0
-    let usersCountProp = properties.getProperty(`${_function_name}/usersCount`)
+    let usersCountProp = properties.getProperty("createEcUsersDocuments/usersCount")
     if (usersCountProp) usersCount = parseInt(usersCountProp)
 
     let next = true
@@ -111,8 +118,8 @@ const createEcUsersDocuments = async (_function_name) => {
       let current_time = new Date()
       let difference = parseInt((current_time.getTime() - start_time.getTime()) / (1000 * 60));
       if (difference >= 5) {
-        properties.setProperty(`${_function_name}/usersCount`, usersCount);
-        ScriptApp.newTrigger(_function_name).timeBased().after(60 * 1000).create()
+        properties.setProperty("createEcUsersDocuments/usersCount", usersCount);
+        ScriptApp.newTrigger("createEcUsersDocuments").timeBased().after(60 * 1000).create()
         return
       }
 
@@ -124,47 +131,51 @@ const createEcUsersDocuments = async (_function_name) => {
 
         let lastUser = users[users.length - 1]
         searchParams["created_date"] = lastUser.created_date
-        properties.setProperty(`${_function_name}/createdDate`, lastUser.created_date)
+        properties.setProperty("createEcUsersDocuments/createdDate", lastUser.created_date)
 
         usersCount += users.length
-        let dateTime = new Date(lastUser.created_date * 1000);
+        console.log(usersCount)
 
         next = res.data.next
         if (!next) break
       } else {
-        notifyToSlack(`${_function_name}: response failed`)
+        notifyToSlack("createEcUsersDocuments: response failed")
         break
       }
     }
-    notifyToSlack(`EC: ${usersCount}件の顧客情報を書き込みました`)
-  
-    properties.setProperty(`${ _function_name } / usersCount`, 0)
-    properties.setProperty(`${ _function_name } / createdDate`, "")
-    delete_specific_triggers("createDocumentsEcAllUsers")
+    if (usersCount >= 1) {
+      notifyToSlack(`EC: ${usersCount}件の顧客情報を書き込みました`)
+    } else {
+      notifyToSlack("EC: 新規の顧客情報はありません")
+    }
+
+    properties.setProperty("createEcUsersDocuments/usersCount", "")
+    properties.setProperty("createEcUsersDocuments/createdDate", "")
+    delete_specific_triggers("createEcUsersDocuments")
     return
   } catch (e) {
-    notifyToSlack(`${ _function_name }: ${ e.message }`)
+    notifyToSlack(`${_function_name}: ${e.message}`)
     return
   }
 }
 
-const createEcOrders = async () => {
-  await createEcOrdersDocuments("createEcOrders")
+const createEcOrders = () => {
+  createEcOrdersDocuments("createEcOrders")
   return
 }
 
-const addEcOrders = async () => {
-  await createEcOrdersDocuments("addEcOrders")
+const addEcOrders = () => {
+  createEcOrdersDocuments("addEcOrders")
   return
 }
 
-const createEcUsers = async () => {
-  await createEcUsersDocuments("createEcUsers")
+const createEcUsers = () => {
+  createEcUsersDocuments("createEcUsers")
   return
 }
 
-const addEcUsers = async () => {
-  await createEcUsersDocuments("addEcUsers")
+const addEcUsers = () => {
+  createEcUsersDocuments("addEcUsers")
   return
 }
 
@@ -174,13 +185,14 @@ const createEcProducts = () => {
 
   if (res.status === 200) {
     let products = res.data
-    products.forEach(_document => firestore.createDocument("ec_products", _document))
+    products.forEach(_document => firestore.createDocument(ecProductsCollectionPath, _document))
   }
 }
 
-const updateEcProducts = async () => {
+const updateEcProducts = () => {
   try {
-    let firestoreProducts = firestore.getDocuments("ec_products")
+    notifyToSlack("EC: 商品情報の更新を開始します")
+    let firestoreProducts = firestore.getDocuments(ecProductsCollectionPath)
     let searchParams = {}
     let res = importEcProducts(searchParams)
 
@@ -203,9 +215,13 @@ const updateEcProducts = async () => {
         firestore.updateDocument(id, ecProductData)
       }
     })
-    if (productsCount >= 1) notifyToSlack(`EC: ${ productsCount }件の商品情報を更新しました`)
+    if (productsCount >= 1) {
+      notifyToSlack(`EC: ${productsCount}件の商品情報を更新しました`)
+    } else {
+      notifyToSlack("EC: 商品情報の更新はありません")
+    }
   } catch (e) {
-    notifyToSlack(`updateEcProducts: ${ e.message }`)
+    notifyToSlack(`updateEcProducts: ${e.message}`)
     return
   }
 }
