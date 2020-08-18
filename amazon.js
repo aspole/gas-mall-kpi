@@ -1,6 +1,7 @@
-// テスト段階ではamazon_ordersとamazon_usersに直接入れないように
-const amazonOrdersCollectionPath = "amazon_orders_test"
-const amazonUsersCollectionPath = "amazon_users_test"
+const amazonOrdersCollectionPath = "amazon_orders"
+const amazonUsersCollectionPath = "amazon_users"
+const AWSAccessKeyId = "AKIAIIMKAYPF2WUJKL4A"
+const MWSCredential = "909qKF3LdNzLFmpTZeJb3a8MjYstxk8G1Z4zV0bh"
 
 const getNowTimestamp = () => {
   let now = new Date()
@@ -11,21 +12,22 @@ const getNowTimestamp = () => {
   return timeStamp
 }
 
-const getMwsListOrdersParams = (_created_after) => {
+const getMwsListOrdersParams = (_purchaseDate) => {
   let timeStamp = getNowTimestamp()
 
-  let dateObject = ""
-  if (_created_after) {
-    dateObject = _created_after
+  let isoString = ""
+  if (_purchaseDate) {
+    isoString = _purchaseDate
   } else {
-    dateObject = new Date(2019, 9, 6)
+    let dateObject = new Date(2019, 9, 6)
+    isoString = dateObject.toISOString()
   }
-  let isoString = dateObject.toISOString()
-  let formattedIsoString = isoString.slice(0, 19) + "Z"
-  let createdAfter = encodeURIComponent(formattedIsoString)
+  // let formattedIsoString = isoString.slice(0, 19) + "Z"
+  let createdAfter = encodeURIComponent(isoString)
 
   let params = {
-    "AWSAccessKeyId": "AKIAIMXVXSH3DZ6DW4NQ",
+    // "AWSAccessKeyId": "AKIAIMXVXSH3DZ6DW4NQ",
+    "AWSAccessKeyId": AWSAccessKeyId,
     "Action": "ListOrders",
     "CreatedAfter": createdAfter,
     "MarketplaceId.Id.1": "A1VC38T7YXB528",
@@ -43,7 +45,8 @@ const getMwsListOrdersByNextTokenParams = (_nextToken) => {
   let timeStamp = getNowTimestamp()
 
   let params = {
-    "AWSAccessKeyId": "AKIAIMXVXSH3DZ6DW4NQ",
+    // "AWSAccessKeyId": "AKIAIMXVXSH3DZ6DW4NQ",
+    "AWSAccessKeyId": AWSAccessKeyId,
     "Action": "ListOrdersByNextToken",
     "NextToken": encodeURIComponent(_nextToken),
     "SellerId": "AJY991MQ0IEWZ",
@@ -76,7 +79,8 @@ const calculateSignature = (_params) => {
     hostHeader + "\n" +
     httpRequestUrl + "\n" +
     queryString
-  let secretKey = "/W2pGsWpQ0qei98mOG4W2LQkJUabmeLC/nD/hg/+"
+  // let secretKey = "/W2pGsWpQ0qei98mOG4W2LQkJUabmeLC/nD/hg/+"
+  let secretKey = MWSCredential
 
   let sha256Hmac = Utilities.computeHmacSha256Signature(stringToSign, secretKey)
   let base64Hmac = Utilities.base64Encode(sha256Hmac)
@@ -108,8 +112,8 @@ const signatureAndPost = (_params) => {
   return json
 }
 
-const mwsListOrders = (_created_after) => {
-  let params = getMwsListOrdersParams(_created_after)
+const mwsListOrders = (_purchaseDate) => {
+  let params = getMwsListOrdersParams(_purchaseDate)
   let json = signatureAndPost(params)
 
   return json
@@ -195,15 +199,16 @@ const createAmazonUsers = () => {
 
   let orders = res.listordersresponse.listordersresult.orders.order
   let nextToken = res.listordersresponse.listordersresult.nexttoken
+  let ordersCount = 0
   
   // ordersを繰り返し文でfirestoreのdocument作成
-  orders.forEach( _document => {
+  orders.forEach(_document => {
     let partOfOrders = [
       'buyeremail', 'isprime', 'lastupdatedate', 'latestshipdate', 'ordertotal', 'ordertype',
       'paymentmethoddetails', 'paymentmethod', 'purchasedate', 'saleschannel', 'shippingaddress'
     ]
     let partOfOrdersDocument = new Object()
-    partOfOrders.forEach( key => partOfOrdersDocument[key]=_document[key] )
+    partOfOrders.forEach(key => partOfOrdersDocument[key] = _document[key])
     firestore.createDocument(amazonUsersCollectionPath, partOfOrdersDocument)
   })
   notifyToSlack(`Amazon: ${orders.length}件の顧客情報を書き込みました`)
@@ -220,7 +225,7 @@ const repeatMwsListUsersByNextToken = (_nextToken, _ordersCount) => {
   // _ordersCountで引数指定されていた場合にそこから代入
   if (_ordersCount && _ordersCount > 0) {
     ordersCount = _ordersCount
-  // トリガーから関数動いた場合は引数が渡されてないのでPropertiesServiceから取得
+    // トリガーから関数動いた場合は引数が渡されてないのでPropertiesServiceから取得
   } else if (properties.getProperty("ordersCount")) {
     ordersCount = properties.getProperty("ordersCount")
   }
@@ -228,7 +233,7 @@ const repeatMwsListUsersByNextToken = (_nextToken, _ordersCount) => {
   // _nextTokenで引数指定されていた場合にそこから代入
   if (typeof _nextToken === "string") {
     nextToken = _nextToken
-  // トリガーから関数動いた場合は引数が渡されてないのでPropertiesServiceから取得
+    // トリガーから関数動いた場合は引数が渡されてないのでPropertiesServiceから取得
   } else if (properties.getProperty("nextToken")) {
     nextToken = properties.getProperty("nextToken")
   }
@@ -292,21 +297,19 @@ const repeatMwsListUsersByNextToken = (_nextToken, _ordersCount) => {
 }
 
 const addAmazonOrdersAndUsers = () => {
-  // mwsListOrdersをdateオブジェクトを渡すとそれ以降のordersを取得するような関数に
-  // したので、楽天と同様の処理を組んでfirestoreのamazon_ordersの最新ドキュメントを取得して
-  // それをdateオブジェクトに変換する
-  let createdAfter = 0
-  let res = mwsListOrders(createdAfter)
-  // ここまで
+  let documents = firestore.query("amazon_orders").OrderBy("purchasedate", "desc").Limit(1).Execute()
+  let docData = documentData(documents[0])
+  let purchaseDate = docData.purchasedate.stringValue
+
+  let res = mwsListOrders(purchaseDate)
 
   let orders = res.listordersresponse.listordersresult.orders.order
+  orders = orders.filter(_order => _order.purchasedate !== purchaseDate)
   let nextToken = res.listordersresponse.listordersresult.nexttoken
 
-  // ordersを取得して繰り返し文でordersとusersを一緒に作る
   let ordersCount = 0
   orders.forEach(_document => {
     firestore.createDocument(amazonOrdersCollectionPath, _document)
-
     let partOfOrders = [
       'buyeremail', 'isprime', 'lastupdatedate', 'latestshipdate', 'ordertotal', 'ordertype',
       'paymentmethoddetails', 'paymentmethod', 'purchasedate', 'saleschannel', 'shippingaddress'
@@ -318,86 +321,71 @@ const addAmazonOrdersAndUsers = () => {
   ordersCount += orders.length
   notifyToSlack(`Amazon: ${ordersCount}件の注文情報と顧客情報を書き込みました`)
 
-  // repeatMwsListOrdersAndUsersByNextToken(nextToken, ordersCount)
+  repeatMwsListOrdersAndUsersByNextToken(nextToken, ordersCount)
 }
 
-// const repeatMwsListOrdersAndUsersByNextToken = (_nextToken, _ordersCount) => {
-//   let properties = PropertiesService.getScriptProperties();
-//   let nextToken = ""
-//   let ordersCount = 0
+const repeatMwsListOrdersAndUsersByNextToken = (_nextToken, _ordersCount) => {
+  let properties = PropertiesService.getScriptProperties();
+  let nextToken = ""
+  let ordersCount = 0
 
-//   // _ordersCountで引数指定されていた場合にそこから代入
-//   if (_ordersCount && _ordersCount > 0) {
-//     ordersCount = _ordersCount
-//     // トリガーから関数動いた場合は引数が渡されてないのでPropertiesServiceから取得
-//   } else if (properties.getProperty("ordersCount")) {
-//     ordersCount = properties.getProperty("ordersCount")
-//   }
+  let ordersCountProps = properties.getProperty("repeatMwsListOrdersAndUsersByNextToken/ordersCount")
+  if (_ordersCount && _ordersCount > 0) {
+    ordersCount = _ordersCount
+  } else if (ordersCountProps) {
+    ordersCount = ordersCountProps
+  }
 
-//   // _nextTokenで引数指定されていた場合にそこから代入
-//   if (typeof _nextToken === "string") {
-//     nextToken = _nextToken
-//     // トリガーから関数動いた場合は引数が渡されてないのでPropertiesServiceから取得
-//   } else if (properties.getProperty("nextToken")) {
-//     nextToken = properties.getProperty("nextToken")
-//   }
+  if (typeof _nextToken === "string") {
+    nextToken = _nextToken
+  } else if (properties.getProperty("repeatMwsListOrdersAndUsersByNextToken/nextToken")) {
+    nextToken = properties.getProperty("repeatMwsListOrdersAndUsersByNextToken/nextToken")
+  }
 
-//   while (nextToken) {
-//     // nextTokenを用いてorders取得
-//     let res = mwsListOrdersByNextToken(nextToken)
+  while (nextToken) {
+    let res = mwsListOrdersByNextToken(nextToken)
 
-//     if (res.listordersbynexttokenresponse &&
-//       res.listordersbynexttokenresponse.listordersbynexttokenresult) {
+    if (res.listordersbynexttokenresponse &&
+      res.listordersbynexttokenresponse.listordersbynexttokenresult) {
 
-//       nextToken = res.listordersbynexttokenresponse.listordersbynexttokenresult.nexttoken
+      nextToken = res.listordersbynexttokenresponse.listordersbynexttokenresult.nexttoken
+      let orders = res.listordersbynexttokenresponse.listordersbynexttokenresult.orders.order
 
-//       // ordersからfirestoreのdocument作成
-//       let orders = res.listordersbynexttokenresponse.listordersbynexttokenresult.orders.order
-//       orders.forEach(_document => {
-//         firestore.createDocument(amazonOrdersCollectionPath, _document)
+      orders.forEach(_document => {
+        firestore.createDocument(amazonOrdersCollectionPath, _document)
+        let partOfOrders = [
+          'buyeremail', 'isprime', 'lastupdatedate', 'latestshipdate', 'ordertotal', 'ordertype',
+          'paymentmethoddetails', 'paymentmethod', 'purchasedate', 'saleschannel', 'shippingaddress'
+        ]
+        let partOfOrdersDocument = new Object()
+        partOfOrders.forEach(key => partOfOrdersDocument[key] = _document[key])
+        firestore.createDocument(amazonUsersCollectionPath, partOfOrdersDocument)
+      })
+      ordersCount += orders.length
+      if (!nextToken) {
+        notifyToSlack(`Amazon: ${ordersCount}件の注文情報と顧客情報を書き込みました`)
+        break
+      }
+    } else if (res.errorresponse.error.code === "RequestThrottled") {
 
-//         let partOfOrders = [
-//           'buyeremail', 'isprime', 'lastupdatedate', 'latestshipdate', 'ordertotal', 'ordertype',
-//           'paymentmethoddetails', 'paymentmethod', 'purchasedate', 'saleschannel', 'shippingaddress'
-//         ]
-//         let partOfOrdersDocument = new Object()
-//         partOfOrders.forEach(key => partOfOrdersDocument[key] = _document[key])
-//         firestore.createDocument(amazonUsersCollectionPath, partOfOrdersDocument)
-//       })
+      properties.setProperty("repeatMwsListOrdersAndUsersByNextToken/nextToken", nextToken)
+      properties.setProperty("repeatMwsListOrdersAndUsersByNextToken/ordersCount", ordersCount)
+      ScriptApp.newTrigger("repeatMwsListOrdersAndUsersByNextToken").timeBased().after(60 * 1000).create()
+      notifyToSlack(`Amazon: ${ordersCount}件の注文情報と顧客情報を書き込みました`)
+      return
 
-//       // slack通知
-//       ordersCount += orders.length
-//       notifyToSlack(`Amazon: ${ordersCount}件の顧客情報を書き込みました`)
-
-//       // nextTokenが存在しない場合に繰り返し処理終了
-//       if (!nextToken) break
-
-//     } else if (res.errorresponse.error.code === "RequestThrottled") {
-
-//       // MWSは一定以上の連続のapi使用を受け付けない仕様になっているのでそのエラーが出た場合に一時処理中止
-//       // PropertiesServiceで変数保存
-//       properties.setProperty("nextToken", nextToken)
-//       properties.setProperty("ordersCount", ordersCount)
-//       // 1分後に関数のトリガー設定
-//       ScriptApp.newTrigger("repeatMwsListOrdersByNextToken").timeBased().after(60 * 1000).create()
-//       return
-
-//     } else {
-//       // 何かしらのエラーで繰り返し処理終了
-//       if (res.errorresponse) {
-//         notifyToSlack(`エラーが発生しました\n${res.errorresponse.error.code}\n${res.errorresponse.error.message}`)
-//       } else {
-//         notifyToSlack("Amazonの注文取得に失敗しました")
-//       }
-//       break
-//     }
-//   }
-//   notifyToSlack("Amazonの顧客情報の書き込みが終了しました")
-
-//   // PropertiesService初期化
-//   properties.setProperty("nextToken", "")
-//   properties.setProperty("ordersCount", "")
-//   // この関数のトリガー全て削除
-//   delete_specific_triggers("repeatMwsListOrdersByNextToken");
-//   return;
-// }
+    } else {
+      if (res.errorresponse) {
+        notifyToSlack(`エラーが発生しました\n${res.errorresponse.error.code}\n${res.errorresponse.error.message}`)
+      } else {
+        notifyToSlack("Amazonの注文取得に失敗しました")
+      }
+      break
+    }
+  }
+  notifyToSlack("Amazonの注文情報と顧客情報の書き込みが終了しました")
+  properties.setProperty("repeatMwsListOrdersAndUsersByNextToken/nextToken", "")
+  properties.setProperty("repeatMwsListOrdersAndUsersByNextToken/ordersCount", "")
+  delete_specific_triggers("repeatMwsListOrdersAndUsersByNextToken");
+  return;
+}

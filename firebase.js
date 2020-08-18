@@ -32,3 +32,25 @@ const documentId = (_document) => {
 
   return _id
 }
+
+const createDocumentTest = () => {
+  let collectionPath = "ec_users"
+  let document = {
+    test: "test"
+  }
+  fsCreateOrUpdateDocument(`${collectionPath}/ccccc`, document)
+}
+
+const fsCreateOrUpdateDocument = (_collection_path, _data) => {
+  try {
+    firestore.createDocument(_collection_path, _data)
+  } catch (e) {
+    if (/Document already exists/.test(e.message)) {
+      firestore.updateDocument(_collection_path, _data)
+    } else {
+      let properties = PropertiesService.getScriptProperties()
+      properties.setProperty("fsCreateOrUpdateDocument", _data);
+      notifyToSlack(`fsCreateOrUpdateDocument: ${e.message}`)
+    }
+  }
+}

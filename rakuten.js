@@ -1,5 +1,5 @@
-const rakutenOrdersCollectionPath = "rakuten_orders"
-const rakutenUsersCollectionPath = "rakuten_users"
+const rakutenOrdersCollectionPath = "rakuten_orders_test"
+const rakutenUsersCollectionPath = "rakuten_users_test"
 
 const postRequestRakutenOrderApi = (_action, _data) => {
   let serviceSecret = "SP375474_fcLsqwX2OcVfcsyK"
