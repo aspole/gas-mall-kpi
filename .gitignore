@@ -1,0 +1,3 @@
+# slackのimcoming webhookのurlがgithubに上がると、
+# 自動的に異なるurlがincoming webhookに設定されるため
+env.js
