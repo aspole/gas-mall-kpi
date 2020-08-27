@@ -278,7 +278,11 @@ const addRakutenOrdersAndUsers = () => {
     let options = {
       "dateType": 1,
       "startDatetime": `${startYear}-${startMonth}-${startDate}T${startHour}:${startMinutes}:${startSeconds}+0900`,
-      "endDatetime": `${endYear}-${endMonth}-${endDate}T00:00:00+0900`
+      "endDatetime": `${endYear}-${endMonth}-${endDate}T00:00:00+0900`,
+      "PaginationRequestModel": {
+        "requestRecordsAmount": 1000,
+        "requestPage": 1
+      }
     }
 
     // firestoreの最新のドキュメントから当日0時までの注文情報取得
