@@ -1,4 +1,6 @@
 const notifyToSlack = (_text) => {
+  console.log(_text)
+  
   let postUrl = slackPostUrl
 
   let json = {
@@ -11,6 +13,5 @@ const notifyToSlack = (_text) => {
     "payload": JSON.stringify(json)
   };
 
-  console.log(_text)
   UrlFetchApp.fetch(postUrl, options);
 }

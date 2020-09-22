@@ -1,6 +1,21 @@
-const rakutenOrdersCollectionPath = "rakuten_orders_test"
-const rakutenUsersCollectionPath = "rakuten_users_test"
+const rakutenOrdersCollectionPath = "rakuten_orders"
+const rakutenUsersCollectionPath = "rakuten_users"
 
+// rakuten_ordersとrakuten_usersを0から作る関数
+const createRakutenCollections = () => {
+  createRakutenOrdersAndUsers()
+  return
+}
+
+// rakuten_ordersとrakuten_usersの新規レコードを作成する関数
+const addRakutenDocuments = () => {
+  addRakutenOrdersAndUsers()
+  return
+}
+
+/**
+ * 以下は関数化して整理してるだけなので基本触らない
+ */
 const postRequestRakutenOrderApi = (_action, _data) => {
   let serviceSecret = "SP375474_fcLsqwX2OcVfcsyK"
   let licenseKey = "SL375474_a3ntmwGeE5tNEIOZ"
@@ -256,6 +271,7 @@ const createRakutenOrdersAndUsers = () => {
 
 const addRakutenOrdersAndUsers = () => {
   try {
+    const recordLimit = 500
     // firestoreからorderDatetimeの降順に1つドキュメント取得
     let documents = firestore.query("rakuten_orders").OrderBy("orderDatetime", "desc").Limit(1).Execute()
     let docData = documentData(documents[0])
@@ -280,25 +296,43 @@ const addRakutenOrdersAndUsers = () => {
       "startDatetime": `${startYear}-${startMonth}-${startDate}T${startHour}:${startMinutes}:${startSeconds}+0900`,
       "endDatetime": `${endYear}-${endMonth}-${endDate}T00:00:00+0900`,
       "PaginationRequestModel": {
-        "requestRecordsAmount": 1000,
+        "requestRecordsAmount": recordLimit,
         "requestPage": 1
       }
     }
+
+    const properties = PropertiesService.getScriptProperties()
+
+    let ordersCount = 0
+    let ordersCountProp = properties.getProperty("addRakutenOrdersAndUsers/ordersCount")
+    if (ordersCountProp) ordersCount = parseInt(ordersCountProp)
 
     // firestoreの最新のドキュメントから当日0時までの注文情報取得
     let res = postRequestRakutenOrderApi("searchOrder", options)
 
     // startDatetimeの重複分の情報は必ず1つ返ってくるので配列が2つ以上の長さの時に処理
     if (res.orderNumberList && res.orderNumberList.length > 1) {
-      // 配列の最初の要素を削除
+      // 元々firestoreに含まれていたレコードを削除
       let orders = getOrder(res.orderNumberList)
       orders = orders.filter(_order => _order.orderNumber !== docData.orderNumber.stringValue)
       orders.forEach(_order => {
         firestore.createDocument(rakutenOrdersCollectionPath, _order)
         firestore.createDocument(rakutenUsersCollectionPath, _order['OrdererModel'])
       })
-      notifyToSlack(`楽天: ${orders.length}件の注文情報と顧客情報を書き込みました`)
+      ordersCount += orders.length
+      notifyToSlack(`楽天: ${ordersCount}件の注文情報と顧客情報を書き込みました`)
+
+      if (orders.length >= (recordLimit - 1)) {
+        properties.setProperty("addRakutenOrdersAndUsers/ordersCount", ordersCount);
+        delete_specific_triggers("addRakutenOrdersAndUsers")
+        ScriptApp.newTrigger("addRakutenOrdersAndUsers").timeBased().after(60 * 1000).create()
+      } else {
+        properties.setProperty("addRakutenOrdersAndUsers/ordersCount", 0)
+        delete_specific_triggers("addRakutenOrdersAndUsers")
+      }
     } else {
+      properties.setProperty("addRakutenOrdersAndUsers/ordersCount", 0)
+      delete_specific_triggers("addRakutenOrdersAndUsers")
       notifyToSlack("楽天: 新規注文はありませんでした")
     }
     return

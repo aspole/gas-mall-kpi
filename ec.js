@@ -17,8 +17,8 @@ const addEcOrders = () => {
 
 // firestoreのec_orderのupdated_dateが最新のもの以降のEC上のデータを
 // firestoreに反映する関数
-const updateEcOrders = () => {
-  updateEcOrdersDocuments()
+const updateEcOrders = (_value) => {
+  updateEcOrdersDocuments(_value)
   return
 }
 
@@ -62,7 +62,7 @@ const postEcApi = (_payload, _action) => {
   };
   if (_payload) options["payload"] = _payload
 
-  let test = "https://d0ae6333d405.ngrok.io"
+  let test = null
   let url = (test || "https://tential.jp") + "/api/v1/gas/"
 
   let res = UrlFetchApp.fetch(`${url}${_action}`, options);
@@ -84,18 +84,6 @@ const importEcUsers = (_payload) => {
 const importEcProducts = (_payload) => {
   let res = postEcApi(_payload, "export_products")
   return res
-}
-
-const getOneDayAgoUnix = () => {
-  let newDate = new Date();
-  let year = newDate.getFullYear();
-  let month = newDate.getMonth();
-  let date = newDate.getDate();
-  let zeroOClock = new Date(year, month, date).getTime()
-  let oneDayAgo = zeroOClock - 24 * 60 * 60 * 1000
-  newDate.setTime(oneDayAgo)
-
-  return newDate.getTime() / 1000
 }
 
 const createEcOrdersDocuments = async (_function_name) => {
@@ -165,7 +153,7 @@ const createEcOrdersDocuments = async (_function_name) => {
   }
 }
 
-const updateEcOrdersDocuments = async () => {
+const updateEcOrdersDocuments = async (_value) => {
   try {
     notifyToSlack("EC: 注文情報の更新を開始します")
     delete_specific_triggers("updateEcOrdersDocuments")
@@ -174,7 +162,9 @@ const updateEcOrdersDocuments = async () => {
 
     let searchParams = {}
     let updatedDateProp = properties.getProperty("updateEcOrdersDocuments/updatedDate")
-    if (!updatedDateProp) {
+    if (_value && _value.updated_after) {
+      searchParams["updated_date"] = _value.updated_after
+    } else if (!updatedDateProp) {
       let documents = firestore.query("ec_orders").OrderBy("updated_date", "desc").Limit(1).Execute()
       let docData = documentData(documents[0])
       searchParams["updated_date"] = docData.updated_date.integerValue
@@ -362,6 +352,91 @@ const updateEcUsersDocuments = async () => {
     return
   } catch (e) {
     notifyToSlack(`updateEcUsersDocuments: ${e.message}`)
+    return
+  }
+}
+
+const createLackOrders = async () => {
+  try {
+    notifyToSlack("EC: 注文情報の書き込みを開始します")
+    delete_specific_triggers("createLackOrders")
+    let start_time = new Date()
+    let properties = PropertiesService.getScriptProperties()
+
+    let searchParams = {}
+    let createdDateProp = properties.getProperty("createLackOrders/createdDate")
+    if (!createdDateProp) {
+      // 以下変数を任意で入力
+      const year = 2020
+      let month = 9
+      const date = 1
+      // ここまで
+
+      month -= 1
+
+      const startDate = new Date(year, month, date)
+      const startUnix = startDate.getTime() / 1000
+
+      searchParams["created_date"] = startUnix
+    } else if (createdDateProp) searchParams["created_date"] = createdDateProp
+
+    let ordersCount = 0
+    let ordersCountProp = properties.getProperty("createLackOrders/ordersCount")
+    if (ordersCountProp) ordersCount = parseInt(ordersCountProp)
+
+    let next = true
+    while (next) {
+      let current_time = new Date()
+      let difference = parseInt((current_time.getTime() - start_time.getTime()) / (1000 * 60));
+      if (difference >= 4) {
+        notifyToSlack(`EC: ${ordersCount}件の注文情報を書き込みました`)
+        properties.setProperty("createLackOrders/ordersCount", ordersCount);
+        ScriptApp.newTrigger("createLackOrders").timeBased().after(60 * 1000).create()
+        return
+      }
+
+      let res = importEcOrders(searchParams)
+
+      if (res.status === 200) {
+        let orders = res.data.list
+
+        orders.forEach(_document => {
+          try {
+            fsCreateOrUpdateDocument(`${ecOrdersCollectionPath}/${_document._id}`, _document)
+          } catch(e) {
+            console.log(_document)
+          }
+        })
+
+        let lastOrder = orders[orders.length - 1]
+        searchParams["created_date"] = lastOrder.created_date
+        properties.setProperty("createLackOrders/createdDate", lastOrder.created_date)
+
+        ordersCount += orders.length
+
+        let date = new Date(lastOrder.created_date * 1000)
+        console.log(`${date}まで${ordersCount}件`)
+
+        next = res.data.next
+        if (!next) break
+      } else {
+        notifyToSlack("createLackOrders: response failed")
+        break
+      }
+    }
+    if (ordersCount >= 1) {
+      notifyToSlack(`EC: ${ordersCount}件の注文情報を書き込みました`)
+    } else {
+      notifyToSlack("EC: 新規の注文情報はありません")
+    }
+
+    notifyToSlack("EC: 注文情報の書き込みを終了します")
+    properties.setProperty("createLackOrders/ordersCount", "")
+    properties.setProperty("createLackOrders/createdDate", "")
+    delete_specific_triggers("createLackOrders")
+    return
+  } catch (e) {
+    notifyToSlack(`createLackOrders: ${e.message}`)
     return
   }
 }

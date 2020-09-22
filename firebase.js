@@ -33,14 +33,6 @@ const documentId = (_document) => {
   return _id
 }
 
-const createDocumentTest = () => {
-  let collectionPath = "ec_users"
-  let document = {
-    test: "test"
-  }
-  fsCreateOrUpdateDocument(`${collectionPath}/ccccc`, document)
-}
-
 const fsCreateOrUpdateDocument = (_collection_path, _data) => {
   try {
     firestore.createDocument(_collection_path, _data)
@@ -49,8 +41,21 @@ const fsCreateOrUpdateDocument = (_collection_path, _data) => {
       firestore.updateDocument(_collection_path, _data)
     } else {
       let properties = PropertiesService.getScriptProperties()
-      properties.setProperty("fsCreateOrUpdateDocument", _data);
+      properties.setProperty("fsCreateOrUpdateDocument", JSON.stringify(_data));
       notifyToSlack(`fsCreateOrUpdateDocument: ${e.message}`)
     }
   }
+}
+
+const createDocumentTest = () => {
+  const collectionPath = "ec_orders"
+  const data = {
+    aaa: "test"
+  }
+  fsCreateOrUpdateDocument(collectionPath, data)
+}
+
+const getCollection = async () => {
+  const allEcOrders = await firestore.query("ec_orders").Execute()
+  console.log(allEcOrders.length)
 }

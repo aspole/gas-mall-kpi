@@ -8,7 +8,7 @@
     }]
   },
   "webapp": {
-    "access": "ANYONE_ANONYMOUS",
+    "access": "MYSELF",
     "executeAs": "USER_DEPLOYING"
   },
   "exceptionLogging": "STACKDRIVER",
