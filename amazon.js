@@ -1,7 +1,7 @@
 const amazonOrdersCollectionPath = "amazon_orders"
 const amazonUsersCollectionPath = "amazon_users"
-const AWSAccessKeyId = "AKIAIAGJWKX6YLFDYA6A"
-const MWSCredential = "+7zAeWgcTt93GQKtq5ztJzlmK0uvC8i7wBFYLHd+"
+const AWSAccessKeyId = "AKIAJ765QZD6RZ7Q4TRQ"
+const MWSCredential = "KvyenMfvchWCXS5qII3gMS6Am/BBD4mUqLkYVOxj"
 
 const getNowTimestamp = () => {
   let now = new Date()
@@ -302,6 +302,9 @@ const addAmazonOrdersAndUsers = () => {
   let purchaseDate = docData.purchasedate.stringValue
 
   let res = mwsListOrders(purchaseDate)
+  if ( res.errorresponse && res.errorresponse.error ) {
+    notifyToSlack(`addAmazonOrdersAndUsers: ${res.errorresponse.error.code}`)
+  }
 
   let orders = res.listordersresponse.listordersresult.orders.order
   orders = orders.filter(_order => _order.purchasedate !== purchaseDate)

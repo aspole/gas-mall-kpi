@@ -36,13 +36,23 @@ const documentId = (_document) => {
 const fsCreateOrUpdateDocument = (_collection_path, _data) => {
   try {
     firestore.createDocument(_collection_path, _data)
+    return {
+      status: "success"
+    }
   } catch (e) {
     if (/Document already exists/.test(e.message)) {
       firestore.updateDocument(_collection_path, _data)
+      return {
+        status: "success",
+      }
     } else {
-      let properties = PropertiesService.getScriptProperties()
-      properties.setProperty("fsCreateOrUpdateDocument", JSON.stringify(_data));
-      notifyToSlack(`fsCreateOrUpdateDocument: ${e.message}`)
+      console.log(e)
+      console.log(_collection_path)
+      console.log(_data)
+    }
+    return {
+      status: "error",
+      message: e.message
     }
   }
 }
@@ -56,6 +66,10 @@ const createDocumentTest = () => {
 }
 
 const getCollection = async () => {
-  const allEcOrders = await firestore.query("ec_orders").Execute()
+  const allEcOrders = await firestore
+    .query("ec_orders")
+    .Where("created_date", ">=", 1598886000)
+    .Where("created_date", "<=", 1600182000)
+    .Execute()
   console.log(allEcOrders.length)
 }
