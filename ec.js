@@ -92,15 +92,10 @@ const countEcOrders = (_payload) => {
   return res
 }
 
-const createFirestoreOrders = (_orders) => {
-  _orders.forEach(_document => {
-    try {
-      fsCreateOrUpdateDocument(`${ecOrdersCollectionPath}/${_document._id}`, _document)
-    } catch (e) {
-      console.log(e.message)
-      console.log(_document)
-    }
-  })
+const getUnixTime = (_year, _month, _date) => {
+  const dateObj = new Date(_year, _month - 1, _date)
+  const unix = dateObj.getTime() / 1000
+  return unix
 }
 
 const createEcOrdersDocuments = async (_function_name, _searchParams) => {
@@ -209,15 +204,15 @@ const updateEcOrdersDocuments = async (_searchParams) => {
     let properties = PropertiesService.getScriptProperties()
 
     let searchParams = {}
-    let searchParamsProps = JSON.parse(properties.getProperty("updateEcOrdersDocuments/searchParams"))
+    let searchParamsProps = properties.getProperty("updateEcOrdersDocuments/searchParams")
     if (_searchParams && _searchParams.searchParams) {
       searchParams = _searchParams.searchParams
     } else if (!searchParamsProps) {
       let documents = firestore.query("ec_orders").OrderBy("updated_date", "desc").Limit(1).Execute()
       let docData = documentData(documents[0])
-      searchParams = parseInt(docData.updated_date.integerValue) + 1
+      searchParams["updated_date"] = parseInt(docData.updated_date.integerValue)
     } else if (searchParamsProps) {
-      searchParams = searchParamsProps
+      searchParams = JSON.parse(searchParamsProps)
     } else {
       throw new Error("unexpected error has occurred on searchParams")
     }
@@ -283,7 +278,7 @@ const updateEcOrdersDocuments = async (_searchParams) => {
       }
     }
     if (ordersCount >= 1) {
-      notifyToSlack(`EC: 注文情報の書き込みを終了します (成功:${successCount}件, 失敗:${ordersCount - successCount}件)`)
+      notifyToSlack(`EC: 注文情報の更新を終了します (成功:${successCount}件, 失敗:${ordersCount - successCount}件)`)
     } else {
       notifyToSlack("EC: 新規の注文情報の更新はありません")
     }
@@ -398,7 +393,7 @@ const createEcUsersDocuments = (_function_name, _searchParams) => {
   }
 }
 
-const updateEcUsersDocuments = async () => {
+const updateEcUsersDocuments = async (_searchParams) => {
   try {
     notifyToSlack("EC: 顧客情報の更新を開始します")
     delete_specific_triggers("updateEcUsersDocuments")
@@ -406,24 +401,34 @@ const updateEcUsersDocuments = async () => {
     let properties = PropertiesService.getScriptProperties()
 
     let searchParams = {}
-    let updatedDateProp = properties.getProperty("updateEcUsersDocuments/updatedDate")
-    if (!updatedDateProp) {
+    let searchParamsProps = properties.getProperty("updateEcUsersDocuments/searchParams")
+    if (_searchParams && _searchParams.searchParams) {
+      searchParams = _searchParams.searchParams
+    } else if (!searchParamsProps) {
       let documents = firestore.query("ec_users").OrderBy("updated_date", "desc").Limit(1).Execute()
       let docData = documentData(documents[0])
-      searchParams["updated_date"] = docData.updated_date.integerValue
-    } else searchParams["updated_date"] = updatedDateProp
+      searchParams["updated_date"] = parseInt(docData.updated_date.integerValue)
+    } else if (searchParamsProps) {
+      searchParams = JSON.parse(searchParamsProps)
+    } else {
+      throw new Error("unexpected error has occurred on searchParams")
+    }
 
     let usersCount = 0
-    let usersCountProp = properties.getProperty("updateEcUsersDocuments/usersCount")
+    let successCount = 0
+    let usersCountProp = properties.getProperty("updateUserssDocuments/usersCount")
+    let successCountProp = properties.getProperty("updateUserssDocuments/successCount")
     if (usersCountProp) usersCount = parseInt(usersCountProp)
+    if (successCountProp) successCount = parseInt(successCountProp)
 
     let next = true
     while (next) {
       let current_time = new Date()
       let difference = parseInt((current_time.getTime() - start_time.getTime()) / (1000 * 60));
       if (difference >= 4) {
-        notifyToSlack(`EC: ${usersCount}件の顧客情報を更新しました`)
+        notifyToSlack(`EC: 顧客情報を更新しました (成功:${successCount}件, 失敗:${usersCount - successCount}件)`)
         properties.setProperty("updateEcUsersDocuments/usersCount", usersCount);
+        properties.setProperty("updateEcUsersDocuments/successCount", successCount);
         ScriptApp.newTrigger("updateEcUsersDocuments").timeBased().after(60 * 1000).create()
         return
       }
@@ -432,16 +437,35 @@ const updateEcUsersDocuments = async () => {
 
       if (res.status === 200) {
         let users = res.data.list
-        users.forEach(_document => fsCreateOrUpdateDocument(`${ecUsersCollectionPath}/${_document._id}`, _document))
+        users.forEach(_document => {
+          try {
+            const firestoreResponse = fsCreateOrUpdateDocument(`${ecUsersCollectionPath}/${_document._id}`, _document)
+            if (firestoreResponse.status === "success") {
+              successCount++
+            } else if (firestoreResponse.status === "error") {
+              throw new Error(firestoreResponse.message)
+            } else {
+              throw new Error("unknown error occurred on update")
+            }
+          } catch (e) {
+            console.log(e.message)
+            console.log(_document)
+            let userId = _document._id
+            let text = `【ECエラーユーザー】\n`
+            text += `ID: ${userId}(https://tential.jp/admin/orders/${userId} )\n`
+            text += `メッセージ: ${e.message}`
+            notifyToSlack(text)
+          }
+        })
 
         let lastUser = users[users.length - 1]
         searchParams["updated_date"] = parseInt(lastUser.updated_date) + 1
-        properties.setProperty("updateEcUsersDocuments/updatedDate", lastUser.updated_date)
+        properties.setProperty("updateEcUsersDocuments/updatedDate", searchParams)
 
         usersCount += users.length
 
         let date = new Date(lastUser.created_date * 1000)
-        console.log(`${date}まで${usersCount}件`)
+        console.log(`${date.toLocaleString("ja")}まで${usersCount}件`)
 
         next = res.data.next
         if (!next) break
@@ -451,14 +475,14 @@ const updateEcUsersDocuments = async () => {
       }
     }
     if (usersCount >= 1) {
-      notifyToSlack(`EC: ${usersCount}件の顧客情報を更新しました`)
+      notifyToSlack(`EC: 顧客情報を更新を終了します (成功:${successCount}件, 失敗:${usersCount - successCount}件)`)
     } else {
       notifyToSlack("EC: 新規の顧客情報の更新はありません")
     }
 
-    notifyToSlack("EC: 顧客情報の更新を終了します")
     properties.setProperty("updateEcUsersDocuments/usersCount", "")
     properties.setProperty("updateEcUsersDocuments/updatedDate", "")
+    properties.setProperty("updateEcUsersDocuments/searchParams", "")
     delete_specific_triggers("updateEcUsersDocuments")
     return
   } catch (e) {
@@ -521,7 +545,7 @@ const compareEcAndFirestore = async () => {
   const endDate = 31
 
   const formatMonth = (_month) => {
-    if(_month === 1) {
+    if (_month === 1) {
       return 11
     } else {
       return _month - 1
@@ -560,7 +584,7 @@ const compareEcAndFirestoreByMonth = async (_year, _month) => {
     }
   }
 
-  if(!_year || !_month) {
+  if (!_year || !_month) {
     let now = new Date
     _year = now.getFullYear()
     _month = now.getMonth() + 1
@@ -588,11 +612,4 @@ const compareEcAndFirestoreByMonth = async (_year, _month) => {
   console.log(`${_year}年${_month}月`)
   console.log(`EC側: ${res.data}件`)
   console.log(`firestore側: ${firestoreOrders.length}件`)
-}
-
-const test = () => {
-  compareEcAndFirestoreByMonth(2020, 6)
-  compareEcAndFirestoreByMonth(2020, 7)
-  compareEcAndFirestoreByMonth(2020, 8)
-  compareEcAndFirestoreByMonth(2020, 9)
 }

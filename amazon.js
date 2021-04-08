@@ -1,7 +1,7 @@
 const amazonOrdersCollectionPath = "amazon_orders"
 const amazonUsersCollectionPath = "amazon_users"
-const AWSAccessKeyId = "AKIAJ765QZD6RZ7Q4TRQ"
-const MWSCredential = "KvyenMfvchWCXS5qII3gMS6Am/BBD4mUqLkYVOxj"
+const AWSAccessKeyId = "AKIAISBZOLWLTFWFGO6Q"
+const MWSCredential = "2YwOO2rtvsnJ964LFc6EWtbdmbhi80zN5yz/+drY"
 
 const getNowTimestamp = () => {
   let now = new Date()
